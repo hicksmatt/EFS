@@ -1,4 +1,3 @@
-> Written with [StackEdit](https://stackedit.io/).
 #Encrypted File Storage (EFS) 
 
 EFS is comprised of two applications. The first implements a backend for passing encrypted files to Google Drive and the second is front end that handles the encryption of selected files. The backend uses Google Cloud Endpoints, App Engine, and Python. The frontend client uses HTML5, JavaScript, and the forge encryption suite.
