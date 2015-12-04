@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>v20a Encrypted File Storage HTML5 Client</title>
+<link rel="stylesheet" type="text/css" media="all" href="assets/css/style.css" />
+
+<link href="https://fonts.googleapis.com/css?family=Roboto" rel="stylesheet" type="text/css">
+  <script src="https://apis.google.com/js/api:client.js"></script>
+  <script>
+  var googleUser = {};
+  var startApp = function() {
+    gapi.load('auth2', function(){
+      // Retrieve the singleton for the GoogleAuth library and set up the client.
+      auth2 = gapi.auth2.init({
+        client_id: [YOUR 'CLIENT ID' HERE],
+        cookiepolicy: 'single_host_origin',
+        // Request scopes in addition to 'profile' and 'email'
+		scope: 'https://www.googleapis.com/auth/drive',
+      });
+      attachSignin(document.getElementById('customBtn'));
+    });
+  };
+
+  function attachSignin(element) {
+    console.log(element.id);
+    auth2.attachClickHandler(element, {},
+        function(googleUser) {
+          document.getElementById('name').innerText = "Signed in: " +
+              googleUser.getBasicProfile().getName();
+        }, function(error) {
+          alert(JSON.stringify(error, undefined, 2));
+        });
+  }
+  </script>
+  <style type="text/css">
+    #customBtn {
+      display: inline-block;
+      background: #4285f4;
+      color: white;
+      width: 190px;
+      border-radius: 5px;
+      white-space: nowrap;
+    }
+    #customBtn:hover {
+      cursor: pointer;
+    }
+    span.label {
+      font-weight: bold;
+    }
+    span.icon {
+      /* background: url('/identity/sign-in/g-normal.png') transparent 5px 50% no-repeat;*/
+      display: inline-block;
+      vertical-align: middle;
+      width: 42px;
+      height: 42px;
+      border-right: #2265d4 1px solid;
+    }
+    span.buttonText {
+      display: inline-block;
+      vertical-align: middle;
+      padding-left: 42px;
+      padding-right: 42px;
+      font-size: 14px;
+      font-weight: bold;
+      /* Use the Roboto font that is loaded in the <head> */
+      font-family: 'Roboto', sans-serif;
+    }
+	form * {
+	  display: block;
+	  margin: 10px;
+	}
+  </style>
+
+
+
+
+</head>
+<body>
+
+  <div id="gSignInWrapper">
+    <span class="label">Sign in with:</span>
+    <div id="customBtn" class="customGPlusSignIn">
+      <span class="icon"></span>
+      <span class="buttonText">Google</span>
+    </div>
+  </div>
+  <div id="name"></div>
+  <script>startApp();</script>
+  
+<h1>Encrypted File Storage HTML5 Client</h1>
+
+
+<fieldset>
+<legend>Manifest File</legend>
+<input type="hidden" id="MAX_FILE_SIZE" name="MAX_FILE_SIZE" value="300000" />
+
+<div>
+	<label for="fileselect">File to Use as Manifest:</label>
+	<input type="file" id="manifestselect" onchange="readManifest(event)"/>
+</div>
+</fieldset>
+
+
+<fieldset>
+<legend>Private Key</legend>
+
+<div>
+	<label for="fileselect">File to Use For Private Key:</label>
+	<input type="file" id="privateselect" onchange="readPrivateKey(event)"/>
+</div>
+</fieldset>
+
+
+<fieldset>
+<legend>Target Files</legend>
+
+<input type="hidden" id="MAX_FILE_SIZE" name="MAX_FILE_SIZE" value="300000" />
+
+<div>
+	<label for="fileselect">Files to upload:</label>
+	<input type="file" id="fileselect" name="fileselect[]" multiple="multiple" />
+	<div id="zoneDrop">or drop files here</div>
+</div>
+</fieldset>
+
+<form name="myform">
+<select name="master" size="1">
+</select>
+</form>
+<button onclick="downloadFile()">Download</button>
+<button onclick="downloadManifest()">Download Manifest</button>
+
+<div id="messages">
+<p>Status Messages</p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+<script src="assets/js/script.js"></script>
+<script src="assets/js/forge.bundle.js"></script>
+</body>
+<script> 
+
+
+	"use strict";
+	var CLIENT_ID = [YOUR 'CLIENT ID' HERE];
+	var SCOPES = 'https://www.googleapis.com/auth/drive';
+	
+	function download(filename, text) {
+	  var element = document.createElement('a');
+	  element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+	  element.setAttribute('download', filename);
+
+	  element.style.display = 'none';
+	  document.body.appendChild(element);
+
+	  element.click();
+
+	  document.body.removeChild(element);
+	}
+	
+	function downloadManifest() {
+		download('manifest.txt',manifest);
+	}
+	
+	
+    function onSuccess(googleUser) {
+		console.log('Logged in as: ' + googleUser.getBasicProfile().getName());
+		gapi.client.load('oath2', 'v2', function() {
+			signin(true, userAuthed);
+		});
+
+    }
+    function onFailure(error) {
+      console.log(error);
+    }
+    function renderButton() {
+      gapi.signin2.render('my-signin2', {
+        'scope': 'https://www.googleapis.com/auth/drive',
+        'width': 200,
+        'height': 50,
+        'longtitle': true,
+        'theme': 'dark',
+        'onsuccess': onSuccess,
+        'onfailure': onFailure
+      });
+    }
+
+	function onSignIn(googleUser) {
+		var profile = googleUser.getBasicProfile();
+		Output(
+			"<p> ID:  <strong>" + profile.getId() +
+			"</strong> Name: <strong>" + profile.getName() +
+			"</strong> Email: <strong>" + profile.getEmail() +
+			"</strong></p>"
+		);
+	}
+
+	//getElementById
+	function $id(id) {
+		return document.getElementById(id);
+	}
+
+	// file drag hover
+	function dragOver(e) {
+		e.stopPropagation();
+		e.preventDefault();
+		e.target.className = (e.type == "dragover" ? "hover" : "");
+	}
+	
+	// file selection
+	function drop(e) {
+		// cancel event and hover styling
+		dragOver(e);
+		// fetch FileList object
+		var files = e.target.files || e.dataTransfer.files;
+		
+		if (manifestPresent === true){
+			if (privatePresent == true){		
+				// process all File objects
+				for (var i = 0, f; f = files[i]; i++) {
+					ParseFile(f);
+				}
+			} else {
+				Output(
+					"<p> <strong> ERROR: No Private Key Selected </strong> </pt>"
+				);
+			}
+		} else {
+			Output(
+				"<p> <strong> ERROR: No Manifest File Selected </strong> </pt>"
+			);
+		}
+	}
+	
+	// output file information
+	function ParseFile(file) {
+
+		Output(
+			"<p>File information: <strong>" + file.name +
+			"</strong> type: <strong>" + file.type +
+			"</strong> size: <strong>" + file.size +
+			"</strong> bytes</p>"
+		);
+		
+		//split, encrypt, and send
+		var FileChunks = SplitAndEncryptFile(file);
+	}
+	
+	//define chunk class
+	class Chunk {
+		constructor(order, hash, salt, location, key, iv, ciphertext) {
+		this.order = order;
+		this.hash = hash;
+		this.salt = salt;
+		this.location = location;
+		this.key = key;
+		this.iv = iv;
+		this.ciphertext = ciphertext;				
+		}
+	}
+	
+	//encrypt a plaintext blob and return a chunk
+	function EncryptChunk(order, plaintext){
+		
+		//hash is of unencrypted plaintext
+		//salt is for the sha1 hash
+		//location is random google/dropbox
+		//key is random
+		//iv is random
+		//ciphertext
+	
+		//get random 128bit salt
+		var salt = forge.random.getBytesSync(16);
+		var saltHex = forge.util.bytesToHex(salt);
+		//compute sha512 hash
+		var hmac = forge.hmac.create();
+		hmac.start('sha1', salt);
+		hmac.update(plaintext);
+		var hash = hmac.digest().toHex();
+		
+		//get 256 bit key and 128 bit iv
+		var key = forge.random.getBytesSync(32);
+		var iv = forge.random.getBytesSync(16);
+		
+		var ivHex = forge.util.bytesToHex(iv);
+		var keyencrypted1 = pubKey.encrypt(key, 'RSA-OAEP');
+		var keyencrypted = forge.util.bytesToHex(keyencrypted1);
+		
+		//create AES256 cipher
+		var cipher = forge.cipher.createCipher('AES-CBC', key);
+		//initialize
+		cipher.start({iv:iv});
+		//encrypt plaintext
+		cipher.update(forge.util.createBuffer(plaintext));
+		cipher.finish();
+		var ciphertext = cipher.output;
+		ciphertext = ciphertext.toHex();
+		
+		//fix location to be random from list of possibilities
+		var chooseRandom = Math.random();
+		var location = 'google';
+		//if (chooseRandom < .5){
+		//	location = 'dropbox';
+		//}
+
+		var keyhex = keyencrypted;
+		keyencrypted1 = forge.util.hexToBytes(keyencrypted);
+		iv = forge.util.createBuffer();
+		var dataencrypted = forge.util.createBuffer();
+		
+		iv.putBytes(forge.util.hexToBytes(ivHex));
+		dataencrypted.putBytes(forge.util.hexToBytes(ciphertext));
+		
+		var key = privKey.decrypt(keyencrypted1, 'RSA-OAEP');
+		
+		var decipher = forge.cipher.createDecipher('AES-CBC', key);
+		decipher.start({iv: iv});
+		decipher.update(dataencrypted);
+		decipher.finish();
+		
+		var PlainText = decipher.output;
+		Output(
+		"<p>PlainText: <strong>" + PlainText +
+		"</strong> </p>"
+		);
+
+		var blob = new Chunk( order, hash, saltHex, location, keyencrypted, ivHex, ciphertext);
+		return blob
+	}
+	
+	//4096 byte sizes and encrypt
+	function SplitAndEncryptFile(file) {
+		var SplitSize = 4096*2;
+		var missingBytes = 0;
+		if ((file.size % SplitSize) != 0){
+			missingBytes = file.size % SplitSize;
+		}
+		Output(
+			"<p>Missing bytes: <strong>" + missingBytes +
+			"</strong> </p>"
+		);
+		var FileChunks = [];
+		var iterations = Math.ceil(file.size/SplitSize);
+			Output(
+			"<p>Iterations: <strong>" + iterations +
+			"</strong> </p>"
+			);
+		var Start = 0;
+		var Stop = Start + SplitSize+1
+		//var Blob = {hash: " ", salt: " ", location: " "
+		for (var i = 0; i < iterations; i++){
+			Start = i*SplitSize;
+			Stop = Start + SplitSize+1;
+			//slice chunk
+			var blob = file.slice(Start, Stop);
+			var reader = new FileReader();
+			var newChunk = new Chunk;
+			reader.onload = function(currentI){
+			    return function(event){
+					var plaintext = event.target.result;
+
+					//encrypt chunk
+					newChunk = EncryptChunk(currentI+1, plaintext);
+					//add chunk to rest of chunks
+					FileChunks.push(newChunk);
+					
+					//send to server
+					sendToServer(newChunk);
+					
+					//write to manifest!
+					if (FileChunks.length == iterations){
+						for (var k = 0; k < FileChunks.length; k++){
+							Output(
+								"<p> Order: <strong> " + FileChunks[k].order +
+								"</strong> hash: <strong> " + FileChunks[k].hash +
+								"</strong> ciphertext: <strong> " + FileChunks[k].ciphertext +
+								"</strong> </p>"
+							);
+						}	
+						writeToManifest(FileChunks, file.name);
+					}
+				}
+			}(i);
+			reader.readAsBinaryString(blob);
+			
+		}
+		return FileChunks;
+	
+	}
+	//send chunk to server
+	function sendToServer(chunk){
+		//SEND TO GOOGLE
+		if (chunk.location == 'google'){
+			var data = chunk.iv + '\n' + chunk.key + '\n' + chunk.ciphertext;
+			var hash = chunk.hash;
+
+			var ROOT = 'https://efs-server.appspot.com/_ah/api';
+			gapi.client.load('helloworld', 'v1', function() {
+				gapi.client.helloworld.file.authed({
+					'times': 1,
+					'filedata':data,
+					'filename':hash,
+					'user' : 'John'
+					}).execute( function(resp) {
+						if(!resp.code){
+							Output(
+								"<p> Response: <strong> " + resp +
+								"</strong> </p>"
+							);
+						}
+					});
+			}, ROOT);
+			
+		//SEND TO DROPBOX
+		} else {
+			var data = chunk.iv + '\n' + chunk.key + '\n' + chunk.ciphertext;
+			var hash = chunk.hash;
+			
+			var datagram = new XMLHttpRequest();
+			//CHANGE THIS TO YOUR SERVER LOCATION
+			datagram.open('POST', "https://efs-server.appspot.com/_ah/api/helloworld/v1/file/1", true);
+			datagram.setRequestHeader('Content-type','application/json; charset=utf-8')
+			var params = JSON.stringify({'filedata':data, "filename":hash,"user":"john"})
+			
+			datagram.onreadystatechange = function() {
+				if (datagram.status == 200){
+					var text = datagram.responseText;
+					Output(
+						"<p> Success! <strong> " + text +
+						"</strong> </p>"
+					);
+				}
+			
+			}
+			datagram.send(params);
+		
+		}
+		
+	}
+	
+	function signin(mode, authorizeCallback) {
+	  gapi.auth.authorize({client_id: CLIENT_ID,
+		scope: SCOPES, immediate: mode},
+		authorizeCallback);
+	}
+
+	function userAuthed() {
+	  var request =
+		  gapi.client.oauth2.userinfo.get().execute(function(resp) {
+		if (!resp.code) {
+		  // User is signed in
+		}
+	  });
+	}
+	
+	
+	//write to manifest
+	function writeToManifest(FileChunks, filename){
+		//constructor(order, hash, salt, location, key, iv, ciphertext)
+
+		//reorderFileChunks
+		var FileEntries = []
+		for (var i = 0; i < FileChunks.length; i++){
+			var position = FileChunks[i].order;
+			FileEntries[position] = FileChunks[i];
+		}
+		
+		//Add new line
+		manifest = manifest + '\n' + '\n';
+		//add filename;
+		manifest = manifest + filename;
+		//add Chunks
+		for (var i = 0; i < FileChunks.length; i++){
+			manifest = manifest + '\n'+ FileChunks[i].order + " " + FileChunks[i].location + " " + FileChunks[i].hash + " " + FileChunks[i].salt;
+		}
+		console.log(manifest);
+		Output(
+			"<p> New Manifest: <strong> " + manifest +
+			"</strong> </p>"
+		);
+		//parse manifest
+		var delims = "\n\n";
+		var tokens = manifest.split(delims);
+		var possibles = [];
+		for (var i=0;i<tokens.length;i++){
+			var delim2 = "\n";
+			var subtoken = tokens[i].split(delim2);
+			possibles.push(subtoken[0]);
+		}
+		
+		document.myform.master.options.length=0
+		var master=document.myform.master
+		for (i=1; i<possibles.length; i++){
+			master.options[master.options.length]=new Option(possibles[i], possibles[i], false, false)
+		}
+
+	}
+
+	//get manifest
+	function readManifest(event) {
+		var fileList = event.target.files;
+
+		for(var i=0; i < fileList.length; i++ ) {
+			var file = fileList[i];     // a File object
+			loadManifest(file);
+		}
+	}
+	
+	var manifestPresent = false;
+	var manifest = 0;
+	var publicPresent = false;
+	var pubKey = 0;
+	var privatePresent = false;
+	var privKey = 0;
+	
+	
+	//load manifest
+	function loadManifest(file) {
+		var readerman = new FileReader();
+		
+		readerman.onload = function(event) {
+			manifest = event.target.result;
+			manifestPresent = true;
+			Output(
+				"<p> Manifest: <strong> " + manifest +
+				"</strong> </p>"
+			);
+			
+
+			//parse manifest
+			var delims = "\n\n";
+			var tokens = manifest.split(delims);
+			var possibles = [];
+			for (var i=0;i<tokens.length;i++){
+				var delim2 = "\n";
+				var subtoken = tokens[i].split(delim2);
+				possibles.push(subtoken[0]);
+			}
+			
+			
+			document.myform.master.options.length=0
+			var master=document.myform.master
+			for (i=1; i<possibles.length; i++){
+				master.options[master.options.length]=new Option(possibles[i], possibles[i], false, false)
+			}
+		
+		
+		}
+		readerman.readAsText(file);
+
+	}
+	
+	
+	//get key
+	function readPrivateKey(event) {
+		var fileList = event.target.files;
+
+		for(var i=0; i < fileList.length; i++ ) {
+			var file = fileList[i];     // a File object
+			loadPrivateKey(file);
+		}
+	}
+	
+	//load manifest
+	function loadPrivateKey(file) {
+		var readerpub = new FileReader();
+		
+		readerpub.onload = function(event) {
+			var pem = event.target.result;
+			Output(
+				"<p> PEM: <strong> " + pem +
+				"</strong> </p>"
+			);
+			privKey = forge.pki.privateKeyFromPem(pem);
+			pubKey = forge.pki.rsa.setPublicKey(privKey.n, privKey.e);
+			publicPresent = true;
+			privatePresent = true;
+		}
+		readerpub.readAsBinaryString(file);
+	}
+ 
+	function downloadFile(){
+			var delims = "\n\n";
+			var tokens = manifest.split(delims);
+			var possibles = [];
+			Output(
+				"<p> FileSelect: <strong> " + tokens[document.myform.master.options.selectedIndex+1] +
+				"</strong> </p>"
+			);
+			var delims2 = "\n";
+			var tokens2 = tokens[document.myform.master.options.selectedIndex+1].split(delims2);
+			var DownloadArray = [];
+			for (var i=1;i<tokens2.length;i++){
+			//these are all the chunks
+
+				var delims3 = " ";
+				var parts = tokens2[i].split(delims3);
+				var order = parts[0]
+				var location = parts[1];
+				var hash = parts[2];
+				var salt = parts[3];
+				Output(
+					"<p> location: <strong> " + location +
+					"</strong> hash: <strong> " + hash +
+					"</strong> salt: <strong> " + salt +
+					"</strong> </p>"
+				);
+				var partArray = [order, location, hash, salt]
+				DownloadArray.push(partArray);
+			}
+			var DownloadData = [];
+			for (var i=0;i<DownloadArray.length;i++){
+				Output(
+					"<p> location: <strong> " + DownloadArray[i][1] +
+					"</strong> hash: <strong> " + DownloadArray[i][2] +
+					"</strong> salt: <strong> " + DownloadArray[i][3] +
+					"</strong> </p>"
+				);
+				//google
+				if (DownloadArray[i][1] == 'google'){
+					var tempName = DownloadArray[i][2]
+					var ROOT = 'https://efs-server.appspot.com/_ah/api';
+					DownloadData[DownloadArray[i][0]] = gapi.client.load('helloworld', 'v1', function() {
+						gapi.client.helloworld.fileask.authed({
+							'times': 1,
+							'filename': tempName,
+							}).execute( function(resp) {
+								//var newresp = JSON.parse(resp);
+								if(!resp.code){
+									Output(
+										"<p> Response8: <strong> " + resp.filedata +
+										"</strong> </p>"
+									);
+								}
+								
+								//done loading so decrypt
+								var PlainText = '';
+								
+								//DUE TO CURRENT LIMITS ON GOOGLE API ONLY ALLOW 1 DOWNLOAD!
+								//UNCOMMMENT TO GET MORE
+								
+								//if (i == DownloadArray.length){
+								//	DownloadData[DownloadArray[i][0]] = resp.filedata;
+									//for (var j=0;j<DownloadArray.length;i++){
+										var delim = "\n";
+										//var tokens = DownloadData[j];
+										var tokens = resp.filedata.split(delim);
+										
+										var ivhex = tokens[0];
+										var keyhex = tokens[1];
+										var cipherhex = tokens[2];
+										
+										Output(
+											"<p> iv: <strong> " + ivhex +
+											"</strong> key: <strong> " + keyhex +
+											"</strong> cipher: <strong> " + cipherhex +
+											"</strong> </p>"
+										);
+										
+										//var keyencrypted = forge.util.createBuffer();
+										var iv = forge.util.createBuffer();
+										var dataencrypted = forge.util.createBuffer();
+										var keyencrypted = forge.util.hexToBytes(keyhex);
+										iv.putBytes(forge.util.hexToBytes(ivhex));
+										dataencrypted.putBytes(forge.util.hexToBytes(cipherhex));
+										
+										var key = privKey.decrypt(keyencrypted, 'RSA-OAEP');
+										
+										var decipher = forge.cipher.createDecipher('AES-CBC', key);
+										decipher.start({iv: iv});
+										decipher.update(dataencrypted);
+										decipher.finish();
+										
+										PlainText = PlainText + decipher.output;
+										var delim = "0";
+										//var tokens = DownloadData[j];
+										var tokens = PlainText.split(delim);
+										PlainText = tokens[0]
+									//}
+									Output(
+										"<p> PlainText2: <strong> " + PlainText +
+										"</strong> </p>"
+									);
+									download('decypted_file.txt', PlainText);
+									
+								//}
+								return resp.filedata;
+								//DownloadData[DownloadArray[i][0]] = resp.filedata;
+							}, ROOT, tempName, DownloadArray, DownloadData, i);
+					}, ROOT, tempName, DownloadArray, DownloadData, i);
+				
+				//dropbox
+				} else {
+				
+				
+				}
+			}
+	}
+	
+
+	
+	// output information
+	function Output(msg) {
+		var m = $id("messages");
+		m.innerHTML = msg + m.innerHTML;
+	}
+	
+	var dropZone = $id("zoneDrop"),
+		fileSelect = $id("fileselect");
+		
+	fileSelect.addEventListener("change", drop, false);	
+	
+	dropZone.addEventListener("dragover", dragOver, false);
+	dropZone.addEventListener("dragleave", dragOver, false);
+	dropZone.addEventListener("drop", drop, false);
+	dropZone.style.display = "block";
+	
+</script>
+
+</html>
